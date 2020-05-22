@@ -142,7 +142,7 @@ tf.app.flags.DEFINE_boolean(
     'ignore_missing_vars', True,
     'When restoring a checkpoint would ignore missing variables.')
 tf.app.flags.DEFINE_boolean(
-    'run_on_cloud', True,
+    'run_on_cloud', False,
     'Wether we will train on cloud.')
 tf.app.flags.DEFINE_boolean(
     'seq_train', False,
