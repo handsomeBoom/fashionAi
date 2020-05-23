@@ -112,7 +112,7 @@ tf.app.flags.DEFINE_float(
     'end_learning_rate', 0.000001,
     'The minimal end learning rate used by a polynomial decay learning rate.')
 tf.app.flags.DEFINE_float(
-    'warmup_learning_rate', 0.001,
+    'warmup_learning_rate', 0.001, #original learning rate is 0.0001
     'The start warm-up learning rate to avoid NAN.')
 tf.app.flags.DEFINE_integer(
     'warmup_steps', 100,
