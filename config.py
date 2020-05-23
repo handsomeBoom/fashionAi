@@ -23,7 +23,7 @@ TEST_RECORDS_DATA_DIR = '../Datasets/tfrecords_test'
 TEST_RECORDS_STAGE2 = '../Datasets/tfrecords_test_stage2'
 
 CATEGORIES = ['blouse', 'dress', 'outwear', 'skirt', 'trousers']
-SPLITS = ['train_1', 'train_2']#'train_0',
+SPLITS = ['train_1', 'train_2']#'train_0' is deprecated, for lacking warm_up data
 #WARM_UP_SPLITS = ['train_0']
 
 DEBUG_DIR = '../Debug'
