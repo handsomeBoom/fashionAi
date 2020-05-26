@@ -427,6 +427,7 @@ def se_bottleneck_block(inputs, input_filters, name_prefix, is_training, data_fo
     pre_act = tf.add(residuals, rescaled_feat, name=name_prefix + '_add')
     return tf.nn.relu(pre_act, name=name_prefix + '/relu')
 
+# CPN backbone constructure
 def se_cpn_backbone(input_image, istraining, data_format):
     bn_axis = -1 if data_format == 'channels_last' else 1
 
@@ -439,6 +440,7 @@ def se_cpn_backbone(input_image, istraining, data_format):
 
     input_depth = [128, 256, 512, 1024] # the input depth of the the first block is dummy input
     num_units = [3, 4, 6, 3]
+    # same block config as described in the CPN paper
     block_name_prefix = ['conv2_{}', 'conv3_{}', 'conv4_{}', 'conv5_{}']
 
     if data_format == 'channels_first':
@@ -591,6 +593,7 @@ def global_net_sext_bottleneck_block(inputs, input_filters, is_training, data_fo
         pre_act = tf.add(residuals, rescaled_feat, name=name_prefix + '_add')
         return tf.nn.relu(pre_act, name=name_prefix + '/relu')
 
+# doc: core sturecture for seresnet_cpn
 def cascaded_pyramid_net(inputs, output_channals, heatmap_size, istraining, data_format):
     #with tf.variable_scope('resnet50', 'resnet50', values=[inputs]):
     end_points = se_cpn_backbone(inputs, istraining, data_format)

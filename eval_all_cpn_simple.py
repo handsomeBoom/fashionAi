@@ -57,7 +57,7 @@ tf.app.flags.DEFINE_string(
     'model_dir', '.',
     'The parent directory where the model will be stored.')
 tf.app.flags.DEFINE_string(
-    'backbone', 'detnet50_cpn',
+    'backbone', 'seresnet_cpn', # setting the default backbone as seresnet_cpn
     'The backbone network to use for feature extraction.')
 tf.app.flags.DEFINE_integer(
     'log_every_n_steps', 10,
@@ -168,6 +168,7 @@ if config.PRED_DEBUG:
       return save_image_with_heatmap.counter
 
 def get_keypoint(image, predictions, heatmap_size, height, width, category, clip_at_zero=False, data_format='channels_last', name=None):
+    # whether adopting gaussian blur 
     # expand_border = 10
     # pad_pred = tf.pad(predictions, tf.constant([[0, 0], [0, 0], [expand_border, expand_border], [expand_border, expand_border]]),
     #               mode='CONSTANT', name='pred_padding', constant_values=0)
