@@ -210,9 +210,10 @@ if config.PRED_DEBUG:
       return save_image_with_heatmap.counter
 
 def get_keypoint(image, targets, predictions, heatmap_size, height, width, category, clip_at_zero=True, data_format='channels_last', name=None):
-    predictions = tf.reshape(predictions, [1, -1, heatmap_size*heatmap_size])
-
-    pred_max = tf.reduce_max(predictions, axis=-1)
+    predictions = tf.reshape(predictions, [1, -1, heatmap_size*heatmap_size]) # format the prediction shape, which in channel dimension set the score.
+    
+    # Map the coordinate of key point from predictions.
+    pred_max = tf.reduce_max(predictions, axis=-1) # in every element in heatmap*heatmap dimension.
     pred_indices = tf.argmax(predictions, axis=-1)
     pred_x, pred_y = tf.cast(tf.floormod(pred_indices, heatmap_size), tf.float32), tf.cast(tf.floordiv(pred_indices, heatmap_size), tf.float32)
 
@@ -232,7 +233,7 @@ def get_keypoint(image, targets, predictions, heatmap_size, height, width, categ
       pred_heatmap = tf.reshape(pred_heatmap, [-1, heatmap_size, heatmap_size])
       if data_format == 'channels_first':
         image_ = tf.transpose(image_, perm=(1, 2, 0))
-      save_image_op = tf.py_func(save_image_with_heatmap,
+      save_image_op = tf.py_func(save_image_with_heatmap,  
                                   [image_, height, width,
                                   heatmap_size,
                                   tf.reshape(pred_heatmap * 255., [-1, heatmap_size, heatmap_size]),
@@ -267,6 +268,7 @@ cpn_backbone = cpn.cascaded_pyramid_net
 if 'seresnext50' in FLAGS.backbone:
     cpn_backbone = cpn.xt_cascaded_pyramid_net
 
+# Core fn function for keypoint trainning.
 def keypoint_model_fn(features, labels, mode, params):
     targets = labels['targets']
     shape = labels['shape']
@@ -288,7 +290,7 @@ def keypoint_model_fn(features, labels, mode, params):
 
     pred_x, pred_y = get_keypoint(features, targets, score_map, params['heatmap_size'], params['train_image_size'], params['train_image_size'], (params['model_scope'] if 'all' not in params['model_scope'] else '*'), clip_at_zero=True, data_format=params['data_format'])
 
-    # this is important!!!
+    # this is important!!! map backto normal RGB filed
     targets = 255. * targets
     blur_list = [1., 1.37, 1.73, 2.4, None]#[1., 1.5, 2., 3., None]
     #blur_list = [None, None, None, None, None]
@@ -333,6 +335,8 @@ def keypoint_model_fn(features, labels, mode, params):
 
     base_learning_rate = params['learning_rate']
     mse_loss_list = []
+
+    # OHKM loss setting 
     if params['use_ohkm']:
         base_learning_rate = 1. * base_learning_rate
         for pred_ind in list(range(len(pred_outputs) - 1)):
@@ -389,6 +393,7 @@ def keypoint_model_fn(features, labels, mode, params):
     if mode == tf.estimator.ModeKeys.EVAL:
         return tf.estimator.EstimatorSpec(mode=mode, loss=loss, predictions=predictions, eval_metric_ops=metrics)
 
+    # using restimator to define a trainer.
     if mode == tf.estimator.ModeKeys.TRAIN:
         global_step = tf.train.get_or_create_global_step()
 
@@ -398,7 +403,7 @@ def keypoint_model_fn(features, labels, mode, params):
                                                     lr_values)
         truncated_learning_rate = tf.maximum(learning_rate, tf.constant(params['end_learning_rate'], dtype=learning_rate.dtype), name='learning_rate')
         tf.summary.scalar('lr', truncated_learning_rate)
-
+        # Add momentum to SGD trainer.
         optimizer = tf.train.MomentumOptimizer(learning_rate=truncated_learning_rate,
                                                 momentum=params['momentum'])
 
@@ -460,7 +465,6 @@ def sub_loop(model_fn, model_scope, model_dir, run_config, train_epochs, epochs_
 
         logging_hook = tf.train.LoggingTensorHook(tensors=tensors_to_log, every_n_iter=FLAGS.log_every_n_steps, formatter=lambda dicts: '{}:'.format(model_scope) + (', '.join(['%s=%.6f' % (k, v) for k, v in dicts.items()])))
 
-        # FIXME: augment error:tensorflow.python.framework.errors_impl.InvalidArgumentError: indices[0] = 0 is not in [0, 0)
         tf.logging.info('Starting a training cycle.')
         fashionAI.train(input_fn=lambda : input_pipeline(True, model_scope, epochs_per_eval), hooks=[logging_hook], max_steps=(steps_per_epoch*train_epochs))
 
