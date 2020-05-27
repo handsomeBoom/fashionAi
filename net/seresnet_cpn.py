@@ -532,7 +532,7 @@ def se_cpn_backbone(input_image, istraining, data_format):
 
     return end_points
 
-# TODO.
+#  the bottleneck block for RefineNet in CPN
 def global_net_bottleneck_block(inputs, filters, istraining, data_format, projection_shortcut=None, name=None):
     with tf.variable_scope(name, 'global_net_bottleneck', values=[inputs]):
         shortcut = inputs
@@ -659,7 +659,7 @@ def cascaded_pyramid_net(inputs, output_channals, heatmap_size, istraining, data
     Args:
         inputs: Input data to the model.
         output_channals: Finnal output channal of tensor.
-        heatmap_size: The heatmap size for keypoint.
+        heatmap_size: The heatmap size list for feature pyramid.
         istraining: Mode for tarining of inference.
         data_format: The input format ('channels_last' or 'channels_first').
     Return: 
@@ -674,6 +674,7 @@ def cascaded_pyramid_net(inputs, output_channals, heatmap_size, istraining, data
     up_sampling = None
     pyramid_heatmaps = []
     pyramid_laterals = []
+    # Consturct for GlobalNet of CPN.
     with tf.variable_scope('feature_pyramid', 'feature_pyramid', values=end_points):
         # top-down construct the feature pyramid.
         for ind, pyramid in enumerate(reversed(end_points)):
@@ -682,7 +683,7 @@ def cascaded_pyramid_net(inputs, output_channals, heatmap_size, istraining, data
             lateral = tf.nn.relu(inputs, name='relu1_p{}'.format(pyramid_len - ind))
             
             if up_sampling is not None:
-                if data_format == 'channels_first':  # using bilinear method to upsampling.k
+                if data_format == 'channels_first':  # using bilinear method to upsampling.
                     up_sampling = tf.transpose(up_sampling, [0, 2, 3, 1], name='trans_p{}'.format(pyramid_len - ind))
                 up_sampling = tf.image.resize_bilinear(up_sampling, tf.shape(up_sampling)[-3:-1] * 2, name='upsample_p{}'.format(pyramid_len - ind))
                 if data_format == 'channels_first':
@@ -699,21 +700,24 @@ def cascaded_pyramid_net(inputs, output_channals, heatmap_size, istraining, data
             lateral = conv2d_fixed_padding(inputs=lateral, filters=256, kernel_size=1, strides=1,
                           data_format=data_format, kernel_initializer=tf.glorot_uniform_initializer, name='1x1_conv2_p{}'.format(pyramid_len - ind))
             lateral = tf.nn.relu(lateral, name='relu2_p{}'.format(pyramid_len - ind))
-
+            
+            # using bilinear to upsamle from pyramid feature to generate fixed size heatmap.
             outputs = conv2d_fixed_padding(inputs=lateral, filters=output_channals, kernel_size=3, strides=1,
                           data_format=data_format, kernel_initializer=tf.glorot_uniform_initializer, name='conv_heatmap_p{}'.format(pyramid_len - ind))
-            if data_format == 'channels_first':
+            if data_format == 'channels_first': 
                 outputs = tf.transpose(outputs, [0, 2, 3, 1], name='output_trans_p{}'.format(pyramid_len - ind))
             outputs = tf.image.resize_bilinear(outputs, [heatmap_size, heatmap_size], name='heatmap_p{}'.format(pyramid_len - ind))
             if data_format == 'channels_first':
                 outputs = tf.transpose(outputs, [0, 3, 1, 2], name='heatmap_trans_inv_p{}'.format(pyramid_len - ind))
             pyramid_heatmaps.append(outputs)
-
+    
+    # Construct RefineNet of CPN.
     with tf.variable_scope('global_net', 'global_net', values=pyramid_laterals):
         global_pyramids = []
         for ind, lateral in enumerate(pyramid_laterals):
             inputs = lateral
-            for bottleneck_ind in range(pyramid_len - ind - 1):
+            # construct RefineNet part as paper described, which using 0, 1, 2, 3 bottleneck respectively.
+            for bottleneck_ind in range(pyramid_len - ind - 1): 
                 inputs = global_net_bottleneck_block(inputs, 128, istraining, data_format, name='global_net_bottleneck_{}_p{}'.format(bottleneck_ind, pyramid_len - ind))
 
             #if ind < pyramid_len - 1:
@@ -732,6 +736,7 @@ def cascaded_pyramid_net(inputs, output_channals, heatmap_size, istraining, data
 
         concat_pyramids = tf.concat(global_pyramids, 1 if data_format == 'channels_first' else 3, name='concat')
 
+        # helper function 
         def projection_shortcut(inputs):
             return conv2d_fixed_padding(inputs=inputs, filters=256, kernel_size=1, strides=1, data_format=data_format, name='shortcut')
 
@@ -742,6 +747,7 @@ def cascaded_pyramid_net(inputs, output_channals, heatmap_size, istraining, data
 
     return pyramid_heatmaps + [outputs]
 
+# Construct seresnxt backbone CPN model similarlly as cascaded_pyramid_net does.
 def xt_cascaded_pyramid_net(inputs, output_channals, heatmap_size, istraining, data_format, net_depth=50):
     #with tf.variable_scope('resnet50', 'resnet50', values=[inputs]):
     end_points = sext_cpn_backbone(inputs, istraining, data_format, net_depth=net_depth)
@@ -782,6 +788,8 @@ def xt_cascaded_pyramid_net(inputs, output_channals, heatmap_size, istraining, d
             if data_format == 'channels_first':
                 outputs = tf.transpose(outputs, [0, 3, 1, 2], name='heatmap_trans_inv_p{}'.format(pyramid_len - ind))
             pyramid_heatmaps.append(outputs)
+
+    # Construct for RefineNet part of CPN
     with tf.variable_scope('global_net', 'global_net', values=pyramid_laterals):
         global_pyramids = []
         for ind, lateral in enumerate(pyramid_laterals):
