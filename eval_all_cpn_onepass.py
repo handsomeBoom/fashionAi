@@ -58,7 +58,7 @@ tf.app.flags.DEFINE_string(
     'model_dir', '.',
     'The parent directory where the model will be stored.')
 tf.app.flags.DEFINE_string(
-    'backbone', 'detnet50_cpn',
+    'backbone', 'seresnet_cpn', # set default backbone augments to seresnet
     'The backbone network to use for feature extraction.')
 tf.app.flags.DEFINE_integer(
     'log_every_n_steps', 10,

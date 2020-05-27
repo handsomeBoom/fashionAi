@@ -451,12 +451,14 @@ def se_bottleneck_block(inputs, input_filters, name_prefix, is_training, data_fo
     increase_inputs_bn = tf.layers.batch_normalization(increase_inputs, momentum=_BATCH_NORM_DECAY,
                                         name=name_prefix + '_1x1_increase/bn', axis=bn_axis,
                                         epsilon=_BATCH_NORM_EPSILON, training=is_training, reuse=None, fused=_USE_FUSED_BN)
-
+    
+    # Global average pooling operation, which squeeze the feature map on 2-d dimension and create channel desciptor.
     if data_format == 'channels_first':
         pooled_inputs = tf.reduce_mean(increase_inputs_bn, [2, 3], name=name_prefix + '_global_pool', keep_dims=True)
     else:
         pooled_inputs = tf.reduce_mean(increase_inputs_bn, [1, 2], name=name_prefix + '_global_pool', keep_dims=True)
-
+    
+    # Excitation operation as described in paper
     down_inputs = tf.layers.conv2d(pooled_inputs, (input_filters * 2) // reduced_scale, (1, 1), use_bias=True,
                                 name=name_prefix + '_1x1_down', strides=(1, 1),
                                 padding='valid', data_format=data_format, activation=None,
@@ -471,7 +473,8 @@ def se_bottleneck_block(inputs, input_filters, name_prefix, is_training, data_fo
                                 kernel_initializer=tf.contrib.layers.xavier_initializer(),
                                 bias_initializer=tf.zeros_initializer())
     prob_outputs = tf.nn.sigmoid(up_inputs, name=name_prefix + '_prob')
-
+    
+    # rescale operation in stage 3 for consturct SE block.
     rescaled_feat = tf.multiply(prob_outputs, increase_inputs_bn, name=name_prefix + '_mul')
     pre_act = tf.add(residuals, rescaled_feat, name=name_prefix + '_add')
     return tf.nn.relu(pre_act, name=name_prefix + '/relu')
