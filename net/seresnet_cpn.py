@@ -210,6 +210,30 @@ def wrapper_initlizer(shape, dtype=None, partition_info=None):
 
 # for root block, use dummy input_filters, e.g. 128 rather than 64 for the first block
 def se_next_bottleneck_block(inputs, input_filters, name_prefix, is_training, group, data_format='channels_last', need_reduce=True, is_root=False, reduced_scale=16):
+    """Creates one bottleneck layer of blocks for the SE Block.
+        Descibeed in:  Squeeze-and-Excitation Networks
+        https://arxiv.org/abs/1709.01507
+
+    Args:
+      inputs: A tensor of size [batch, channels, height_in, width_in] or
+        [batch, height_in, width_in, channels] depending on data_format.
+      input_filters: The number of filters for the first convolution of the layer.
+      name_prefix: The name for one SE Block layer.
+      is_training: Either True or False, whether we are currently training the
+        model. Needed for batch norm.
+      group: TODO.
+      data_format: The input format ('channels_last' or 'channels_first').
+      need_reduce: Whether need to reduce the dimension of feature map. 
+      is_root: Is the first root block, which input_filers will be 128.
+      reduced_scale: Reduce scale for excitation operation.
+      
+
+    Returns:
+      The output tensor of the block layer.
+    """
+
+
+
     bn_axis = -1 if data_format == 'channels_last' else 1
     strides_to_use = 1
     residuals = inputs
@@ -277,11 +301,13 @@ def se_next_bottleneck_block(inputs, input_filters, name_prefix, is_training, gr
                                         name=name_prefix + '_1x1_increase/bn', axis=bn_axis,
                                         epsilon=_BATCH_NORM_EPSILON, training=is_training, reuse=None, fused=_USE_FUSED_BN)
 
+    # global anverage pooling on chennel dimension for aggregating the infomation in whole feature map.
     if data_format == 'channels_first':
         pooled_inputs = tf.reduce_mean(increase_inputs_bn, [2, 3], name=name_prefix + '_global_pool', keep_dims=True)
     else:
         pooled_inputs = tf.reduce_mean(increase_inputs_bn, [1, 2], name=name_prefix + '_global_pool', keep_dims=True)
 
+    # Excitation opertation to extracting the interdependency between channnel descriptor.
     down_inputs = tf.layers.conv2d(pooled_inputs, input_filters // reduced_scale, (1, 1), use_bias=True,
                                 name=name_prefix + '_1x1_down', strides=(1, 1),
                                 padding='valid', data_format=data_format, activation=None,
@@ -298,6 +324,7 @@ def se_next_bottleneck_block(inputs, input_filters, name_prefix, is_training, gr
     prob_outputs = tf.nn.sigmoid(up_inputs, name=name_prefix + '_prob')
 
     #print(residuals, prob_outputs, increase_inputs_bn)
+    # rescale operation for original elements and channel descripor
     rescaled_feat = tf.multiply(prob_outputs, increase_inputs_bn, name=name_prefix + '_mul')
     pre_act = tf.add(residuals, rescaled_feat, name=name_prefix + '_add')
     return tf.nn.relu(pre_act, name=name_prefix + '/relu')
@@ -305,6 +332,7 @@ def se_next_bottleneck_block(inputs, input_filters, name_prefix, is_training, gr
 
 # the input image should in BGR order, note that this is not the common case in Tensorflow
 def sext_cpn_backbone(input_image, istraining, data_format, net_depth=50, group=32):
+    
     bn_axis = -1 if data_format == 'channels_last' else 1
 
     if data_format == 'channels_last':
@@ -359,6 +387,27 @@ def sext_cpn_backbone(input_image, istraining, data_format, net_depth=50, group=
 
 # for root block, use dummy input_filters, e.g. 128 rather than 64 for the first block
 def se_bottleneck_block(inputs, input_filters, name_prefix, is_training, data_format='channels_last', need_reduce=True, is_root=False, reduced_scale=16):
+    """Creates one  layer for SE Block.
+        Descibeed in:  Squeeze-and-Excitation Networks
+        https://arxiv.org/abs/1709.01507
+
+    Args:
+      inputs: A tensor of size [batch, channels, height_in, width_in] or
+        [batch, height_in, width_in, channels] depending on data_format.
+      input_filters: The number of filters for the first convolution of the layer.
+      name_prefix: The name for one SE Block layer.
+      is_training: Either True or False, whether we are currently training the
+        model. Needed for batch norm.
+      data_format: The input format ('channels_last' or 'channels_first').
+      need_reduce: Whether need to reduce the dimension of feature map. 
+      is_root: Is the first root block, which input_filers will be 128.
+      reduced_scale: Reduce scale for excitation operation.
+      
+
+    Returns:
+      The output tensor of the block layer.
+    """
+
     bn_axis = -1 if data_format == 'channels_last' else 1
     strides_to_use = 1
     residuals = inputs
@@ -429,6 +478,15 @@ def se_bottleneck_block(inputs, input_filters, name_prefix, is_training, data_fo
 
 # CPN backbone constructure
 def se_cpn_backbone(input_image, istraining, data_format):
+    """ Constructe for SeResnet backbone.
+    Args:
+        input_image: the input data.
+        istraining: For traing mode or inferecnce mode.
+        data_format: The input format ('channels_last' or 'channels_first').
+    Returns:
+        SeResNet model graph. 
+    """    
+
     bn_axis = -1 if data_format == 'channels_last' else 1
 
     if data_format == 'channels_last':
@@ -439,7 +497,7 @@ def se_cpn_backbone(input_image, istraining, data_format):
         swaped_input_image = tf.stack([image_channels[2], image_channels[1], image_channels[0]], axis=1)
 
     input_depth = [128, 256, 512, 1024] # the input depth of the the first block is dummy input
-    num_units = [3, 4, 6, 3]
+    num_units = [3, 4, 6, 3] # the hyper-parameters for seresnet sturecture, which is the number of SE block as the paper described.
     # same block config as described in the CPN paper
     block_name_prefix = ['conv2_{}', 'conv3_{}', 'conv4_{}', 'conv5_{}']
 
@@ -460,7 +518,8 @@ def se_cpn_backbone(input_image, istraining, data_format):
     inputs_features = tf.nn.relu(inputs_features, name='conv1/relu_7x7_s2')
 
     inputs_features = tf.layers.max_pooling2d(inputs_features, [3, 3], [2, 2], padding='same', data_format=data_format, name='pool1/3x3_s2')
-
+    
+    # construte for senet backbone 
     end_points = []
     is_root = True
     for ind, num_unit in enumerate(num_units):
@@ -473,6 +532,7 @@ def se_cpn_backbone(input_image, istraining, data_format):
 
     return end_points
 
+# TODO.
 def global_net_bottleneck_block(inputs, filters, istraining, data_format, projection_shortcut=None, name=None):
     with tf.variable_scope(name, 'global_net_bottleneck', values=[inputs]):
         shortcut = inputs
@@ -595,20 +655,34 @@ def global_net_sext_bottleneck_block(inputs, input_filters, is_training, data_fo
 
 # doc: core sturecture for seresnet_cpn
 def cascaded_pyramid_net(inputs, output_channals, heatmap_size, istraining, data_format):
+    """ Construte CPN model.
+    Args:
+        inputs: Input data to the model.
+        output_channals: Finnal output channal of tensor.
+        heatmap_size: The heatmap size for keypoint.
+        istraining: Mode for tarining of inference.
+        data_format: The input format ('channels_last' or 'channels_first').
+    Return: 
+        The CPN model graph and Heatmap.
+    """
+
     #with tf.variable_scope('resnet50', 'resnet50', values=[inputs]):
+
+    # backbone initialize.
     end_points = se_cpn_backbone(inputs, istraining, data_format)
     pyramid_len = len(end_points)
     up_sampling = None
     pyramid_heatmaps = []
     pyramid_laterals = []
     with tf.variable_scope('feature_pyramid', 'feature_pyramid', values=end_points):
-        # top-down
+        # top-down construct the feature pyramid.
         for ind, pyramid in enumerate(reversed(end_points)):
             inputs = conv2d_fixed_padding(inputs=pyramid, filters=256, kernel_size=1, strides=1,
                           data_format=data_format, kernel_initializer=tf.glorot_uniform_initializer, name='1x1_conv1_p{}'.format(pyramid_len - ind))
             lateral = tf.nn.relu(inputs, name='relu1_p{}'.format(pyramid_len - ind))
+            
             if up_sampling is not None:
-                if data_format == 'channels_first':
+                if data_format == 'channels_first':  # using bilinear method to upsampling.k
                     up_sampling = tf.transpose(up_sampling, [0, 2, 3, 1], name='trans_p{}'.format(pyramid_len - ind))
                 up_sampling = tf.image.resize_bilinear(up_sampling, tf.shape(up_sampling)[-3:-1] * 2, name='upsample_p{}'.format(pyramid_len - ind))
                 if data_format == 'channels_first':
@@ -634,6 +708,7 @@ def cascaded_pyramid_net(inputs, output_channals, heatmap_size, istraining, data
             if data_format == 'channels_first':
                 outputs = tf.transpose(outputs, [0, 3, 1, 2], name='heatmap_trans_inv_p{}'.format(pyramid_len - ind))
             pyramid_heatmaps.append(outputs)
+
     with tf.variable_scope('global_net', 'global_net', values=pyramid_laterals):
         global_pyramids = []
         for ind, lateral in enumerate(pyramid_laterals):
