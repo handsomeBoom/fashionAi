@@ -49,7 +49,8 @@ tf.app.flags.DEFINE_float(
     'gpu_memory_fraction', 1., 'GPU memory fraction to use.')
 # scaffold related configuration
 tf.app.flags.DEFINE_string(
-    'data_dir', '../Datasets/tfrecords_test_stage2',#tfrecords_test tfrecords_test_stage1_b tfrecords_test_stage2
+    'data_dir', '../Datasets/tfrecords_test',# set default test dataset to tfrecords_test , lack the others which is 
+                                             #tfrecords_test_stage1_b tfrecords_test_stage2
     'The directory where the dataset input data is stored.')
 tf.app.flags.DEFINE_string(
     'dataset_name', '{}_*.tfrecord', 'The pattern of the dataset name to load.')
@@ -57,7 +58,7 @@ tf.app.flags.DEFINE_string(
     'model_dir', '.',
     'The parent directory where the model will be stored.')
 tf.app.flags.DEFINE_string(
-    'backbone', 'seresnet_cpn', # setting the default backbone as seresnet_cpn
+    'backbone', 'seresnet50_cpn', # setting the default backbone as seresnet_cpn
     'The backbone network to use for feature extraction.')
 tf.app.flags.DEFINE_integer(
     'log_every_n_steps', 10,
