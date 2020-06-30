@@ -348,7 +348,7 @@ def sext_cpn_backbone(input_image, istraining, data_format, net_depth=50, group=
 
     input_depth = [256, 512, 1024, 2048] # the input depth of the the first block is dummy input
     num_units = [3, 4, 6, 3] if net_depth==50 else [3, 4, 23, 3]
-    block_name_prefix = ['conv2_{}', 'conv3_{}', 'conv4_{}', 'conv5_{}']
+    block_name_prefix = ['conv2_{}', 'conv3_{}', 'conv4_{}', 'conv5_{}'] # using resnet conv{2, 3, 4, 5} for featrue pyrimiad
 
     if data_format == 'channels_first':
         swaped_input_image = tf.pad(swaped_input_image, paddings = [[0, 0], [0, 0], [3, 3], [3, 3]])
