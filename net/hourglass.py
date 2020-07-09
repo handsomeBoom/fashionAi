@@ -141,6 +141,7 @@ def dozen_bottleneck_blocks(inputs, in_filters, out_filters, num_modules, is_tra
 
   return inputs
 
+# DOC:consturct hourglass block recursively 
 def hourglass(inputs, filters, is_training, data_format, deep_index=1, num_modules=1, name=None):
   with tf.variable_scope(name, 'hourglass_unit', values=[inputs]):
     upchannal1 = dozen_bottleneck_blocks(inputs, filters, filters, num_modules, is_training, data_format, name='up_{}')
@@ -162,9 +163,11 @@ def hourglass(inputs, filters, is_training, data_format, deep_index=1, num_modul
       upchannal2 = tf.transpose(upchannal2, [0, 3, 1, 2], name='trans_inv')
 
     return tf.add(upchannal1, upchannal2, name='elem_add')
-
+  
+ # DOC: constructe whole hourglass model whith stage num_stack, which out_channels is numbers of keypoints. 
 def create_model(inputs, num_stack, feat_channals, output_channals, num_modules, is_training, data_format):
   with tf.variable_scope('precede', values=[inputs]):
+    # DOC: first regular conv filters same like FCN
     inputs = conv2d_fixed_padding(inputs=inputs, filters=64, kernel_size=7, strides=2,
               data_format=data_format, kernel_initializer=conv_bn_initializer_to_use, name='conv_7x7')
     inputs = batch_norm_relu(inputs, is_training, data_format, name='inputs_bn')
@@ -177,6 +180,7 @@ def create_model(inputs, num_stack, feat_channals, output_channals, num_modules,
     inputs = bottleneck_block(inputs, 128, feat_channals, is_training, data_format, name='residual3')
 
   #return [inputs]
+  #DOC: starting construct num_stack stages hourglass model
   hg_inputs = inputs
   outputs_list = []
   for stack_index in range(num_stack):
@@ -201,6 +205,7 @@ def create_model(inputs, num_stack, feat_channals, output_channals, num_modules,
 
     outputs_list.append(heatmap)
     # no remap conv for the last hourglass
+    # DOC: for supervison operation, recov for prediction heatmap and score.
     if stack_index < num_stack - 1:
       output_scores_ = tf.layers.conv2d(inputs=output_scores, filters=feat_channals, kernel_size=1,
                           strides=1, padding='same', use_bias=True, activation=None,
@@ -217,6 +222,7 @@ def create_model(inputs, num_stack, feat_channals, output_channals, num_modules,
                         name='hg_heatmap/stack_{}/remap_heatmap'.format(stack_index))
 
       # next hourglass inputs
+      # DOC: supervison operation, add heatmap and score information into main brach.
       fused_heatmap = tf.add(output_scores_, heatmap_, 'stack_{}/fused_heatmap'.format(stack_index))
       hg_inputs = tf.add(hg_inputs, fused_heatmap, 'stack_{}/next_inputs'.format(stack_index))
       #hg_inputs = hg_inputs + output_scores_ + heatmap_
