@@ -202,6 +202,7 @@ def se_next_bottleneck_block(inputs, input_filters, name_prefix, is_training, gr
     pre_act = tf.add(residuals, rescaled_feat, name=name_prefix + '_add')
     return tf.nn.relu(pre_act, name=name_prefix + '/relu')
 
+# using dilated convolution to extend feature map riceptive filed.
 def dilated_se_next_bottleneck_block(inputs, input_filters, name_prefix, is_training, group, data_format='channels_last', need_reduce=True, reduced_scale=16):
     bn_axis = -1 if data_format == 'channels_last' else 1
     residuals = inputs
@@ -245,7 +246,7 @@ def dilated_se_next_bottleneck_block(inputs, input_filters, name_prefix, is_trai
         weight_groups = tf.split(weight_, num_or_size_splits=group, axis=-1, name=name_prefix + '_weight_split')
         xs = tf.split(reduced_inputs_relu, num_or_size_splits=group, axis=-1, name=name_prefix + '_inputs_split')
 
-    # !!! before is VALID !!!
+    # !!! before is VALID !!! dilation conv filter
     convolved = [tf.nn.convolution(x, weight, padding='SAME', strides=[1, 1], dilation_rate=[2, 2], name=name_prefix + '_group_conv',
                     data_format=('NCHW' if data_format == 'channels_first' else 'NHWC')) for (x, weight) in zip(xs, weight_groups)]
 
@@ -340,7 +341,7 @@ def sext_backbone(input_image, istraining, data_format, net_depth=101, group=32)
             is_root = False
         end_points.append(inputs_features)
 
-    # conv5
+    # conv5 using dilated conv
     need_reduce = True
     for unit_index in range(1, 4):
         inputs_features = dilated_se_next_bottleneck_block(inputs_features, 2048, 'conv5_{}'.format(unit_index), is_training=istraining, group=group, data_format=data_format, need_reduce=need_reduce)
